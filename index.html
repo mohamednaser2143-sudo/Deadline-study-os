@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeadlineOS 4.0 — Ultimate Student Productivity</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bgDark: '#030407',
+            cardDark: '#0B0F17',
+            elevatedDark: '#121826',
+            neonViolet: '#B829FF',
+            neonCyan: '#00F0FF',
+            neonGreen: '#39FF14',
+            textPrimary: '#F8F9FA',
+            textSecondary: '#8B95A5',
+            statusWarning: '#FFB547',
+          },
+          fontFamily: {
+            sans: ['Sora', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif']
+          },
+          animation: {
+            'fade-in-up': 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            'modal-pop': 'modalPop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          },
+          keyframes: {
+            fadeInUp: {
+              '0%': { opacity: 0, transform: 'translateY(15px)' },
+              '100%': { opacity: 1, transform: 'translateY(0)' },
+            },
+            modalPop: {
+              '0%': { opacity: 0, transform: 'scale(0.95) translateY(10px)' },
+              '100%': { opacity: 1, transform: 'scale(1) translateY(0)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #030407;
+      color: #F8F9FA;
+      font-family: 'Sora', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      margin: 0;
+    }
+    #particle-canvas {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      z-index: 0; pointer-events: none;
+    }
+    .grid-background {
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .glass-panel {
+      background: rgba(11, 15, 23, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .glass-panel:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .progress-ring__circle {
+      transition: stroke-dashoffset 0.4s ease;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+    @keyframes slideInToast {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-animate { animation: slideInToast 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .flip-card { perspective: 1000px; }
+    .flip-card-inner { transition: transform 0.6s; transform-style: preserve-3d; }
+    .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+    .flip-front, .flip-back { backface-visibility: hidden; position: absolute; inset: 0; }
+    .flip-back { transform: rotateY(180deg); }
+  </style>
+</head>
+<body class="relative flex flex-col items-center">
+
+  <canvas id="particle-canvas"></canvas>
+  <div class="grid-background"></div>
+
+  <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+  <!-- COMMAND PALETTE -->
+  <div id="command-palette" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-start justify-center pt-24 p-4">
+    <div class="glass-panel w-full max-w-lg rounded-2xl p-4 space-y-3 animate-modal-pop shadow-2xl border-neonCyan/30">
+      <div class="flex items-center gap-3 px-3 py-2 border-b border-white/10">
+        <i data-lucide="search" class="w-5 h-5 text-neonCyan"></i>
+        <input type="text" id="cmd-input" oninput="handleCommandSearch(event)" placeholder="Type a command or search modules (Ctrl+K)..." class="w-full bg-transparent text-textPrimary placeholder-textSecondary text-sm outline-none">
+        <span class="text-[10px] text-textSecondary px-2 py-0.5 rounded bg-elevatedDark">ESC</span>
+      </div>
+      <div id="cmd-results" class="max-h-64 overflow-y-auto space-y-1"></div>
+    </div>
+  </div>
+
+  <!-- NAVIGATION -->
+  <header id="main-nav-header" class="w-full max-w-6xl px-6 pt-6 pb-4 flex flex-col md:flex-row justify-between items-center gap-4 z-10 animate-fade-in-up transition-all duration-300">
+    <div class="flex items-center gap-4 w-full md:w-auto">
+      <div class="relative w-10 h-10 flex items-center justify-center rounded-xl bg-elevatedDark border border-neonCyan/50">
+        <i data-lucide="compass" class="w-6 h-6 text-neonCyan"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-display font-bold text-2xl tracking-wider">DEADLINE<span class="text-neonCyan">OS</span></span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-neonCyan/10 text-neonCyan border border-neonCyan/30">4.0</span>
+        </div>
+        <div class="text-xs text-textSecondary mt-0.5">XP: <span id="nav-xp" class="text-neonViolet font-bold">0</span> | Level <span id="nav-level" class="text-neonCyan font-bold">1</span></div>
+      </div>
+    </div>
+
+    <nav id="nav-buttons-container" class="flex glass-panel p-1.5 rounded-2xl w-full md:w-auto overflow-x-auto">
+      <button onclick="switchTab('home')" id="tab-home" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-neonViolet text-white transition-all duration-300">
+        <i data-lucide="home" class="w-4 h-4"></i><span>Home</span>
+      </button>
+      <button onclick="switchTab('assignments')" id="tab-assignments" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="layers" class="w-4 h-4"></i><span>Tasks</span>
+      </button>
+      <button onclick="switchTab('notes')" id="tab-notes" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="book-open" class="w-4 h-4"></i><span>Notes</span>
+      </button>
+      <button onclick="switchTab('flashcards')" id="tab-flashcards" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="layers" class="w-4 h-4"></i><span>Cards</span>
+      </button>
+      <button onclick="switchTab('quiz')" id="tab-quiz" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="help-circle" class="w-4 h-4"></i><span>Quiz</span>
+      </button>
+      <button onclick="switchTab('bot')" id="tab-bot" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="bot" class="w-4 h-4"></i><span>AI Bot</span>
+      </button>
+      <button onclick="switchTab('focus')" id="tab-focus" class="nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300">
+        <i data-lucide="crosshair" class="w-4 h-4"></i><span>Deep Work</span>
+      </button>
+    </nav>
+
+    <div class="flex items-center gap-2">
+      <button onclick="toggleCommandPalette()" class="p-2.5 rounded-xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-neonCyan transition" title="Command Palette (Ctrl+K)">
+        <i data-lucide="command" class="w-5 h-5"></i>
+      </button>
+      <button onclick="toggleModal('settings-modal')" class="p-2.5 rounded-xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-neonCyan transition" title="Settings">
+        <i data-lucide="settings" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="w-full max-w-6xl px-6 py-4 z-10 flex-1">
+
+    <!-- HOME PAGE -->
+    <section id="page-home" class="space-y-6 animate-fade-in-up">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-2">
+        <div>
+          <h1 id="greeting" class="font-display text-3xl font-bold">Good evening. Ready to make progress?</h1>
+          <p class="text-textSecondary text-sm mt-1">Here is your automated priority briefing.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openOCRModal()" class="px-4 py-2.5 rounded-xl bg-elevatedDark border border-neonViolet/40 text-neonViolet font-bold text-xs flex items-center gap-2 hover:bg-neonViolet/10 transition">
+            <i data-lucide="scan" class="w-4 h-4"></i> Scan Screenshot
+          </button>
+          <button onclick="toggleModal('add-modal')" class="px-4 py-2.5 rounded-xl bg-neonCyan text-bgDark font-bold text-xs flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-neonCyan/20">
+            <i data-lucide="plus" class="w-4 h-4"></i> Add Assignment
+          </button>
+        </div>
+      </div>
+
+      <!-- DO THIS NEXT CARD -->
+      <div class="glass-panel p-6 rounded-2xl border-neonCyan/40 relative overflow-hidden">
+        <div class="flex justify-between items-start mb-3">
+          <span class="text-xs font-bold uppercase tracking-widest text-neonCyan flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-neonCyan animate-ping"></span> Do This Next
+          </span>
+          <span id="next-subject" class="text-xs px-3 py-1 rounded-lg bg-bgDark border border-neonCyan/20 text-neonCyan font-bold">--</span>
+        </div>
+
+        <h2 id="next-title" class="font-display text-3xl font-bold mb-2">No active assignments</h2>
+        <p id="next-reason" class="text-textSecondary text-sm mb-6">Add homework to initialize your study scheduler.</p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-xs">
+          <div class="bg-bgDark/50 p-3.5 rounded-xl border border-white/5">
+            <div class="text-textSecondary mb-1">Deadline Countdown</div>
+            <div id="next-countdown" class="font-display text-sm font-bold text-textPrimary">--</div>
+          </div>
+          <div class="bg-bgDark/50 p-3.5 rounded-xl border border-white/5">
+            <div class="text-textSecondary mb-1">Remaining Workload</div>
+            <div id="next-duration" class="font-display text-sm font-bold text-textPrimary">--</div>
+          </div>
+          <div class="bg-bgDark/50 p-3.5 rounded-xl border border-white/5">
+            <div class="text-textSecondary mb-1">Due Date</div>
+            <div id="next-duedate" class="font-display text-sm font-bold text-textPrimary">--</div>
+          </div>
+          <div class="bg-bgDark/50 p-3.5 rounded-xl border border-white/5">
+            <div class="text-textSecondary mb-1">XP Reward</div>
+            <div class="font-display text-sm font-bold text-neonViolet">+50 XP</div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button onclick="startDeepWorkOnTopTask()" id="start-focus-btn" disabled class="flex-1 py-4 rounded-xl bg-neonViolet opacity-50 cursor-not-allowed text-white font-bold tracking-wide flex items-center justify-center gap-2 transition shadow-lg shadow-neonViolet/20">
+            <i data-lucide="power" class="w-5 h-5"></i>
+            <span>START DEEP WORK</span>
+          </button>
+          <button onclick="viewTopTaskDetails()" id="view-task-btn" disabled class="px-5 py-4 rounded-xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-white transition">
+            View Assignment
+          </button>
+        </div>
+      </div>
+
+      <!-- TODAY'S STUDY PLAN & CALENDAR -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-panel p-6 rounded-2xl space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="font-display text-base font-bold flex items-center gap-2">
+              <i data-lucide="calendar-days" class="w-4 h-4 text-neonCyan"></i> Study Plan
+            </h3>
+            <button onclick="toggleCalendarModal()" class="text-xs text-neonViolet hover:underline">Full Calendar</button>
+          </div>
+          <div id="today-study-plan-list" class="space-y-2 text-xs"></div>
+        </div>
+
+        <div class="md:col-span-2 glass-panel p-6 rounded-2xl space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="font-display text-base font-bold flex items-center gap-2">
+              <i data-lucide="list-ordered" class="w-4 h-4 text-neonViolet"></i> Coming Up Queue
+            </h3>
+            <button onclick="switchTab('assignments')" class="text-xs text-neonCyan hover:underline">View All &rarr;</button>
+          </div>
+          <div id="home-queue-list" class="space-y-2.5"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ASSIGNMENTS PAGE -->
+    <section id="page-assignments" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 class="font-display text-3xl font-bold">Assignments</h1>
+          <p class="text-textSecondary text-sm mt-1">Manage, filter, and review your homework backlog.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openOCRModal()" class="px-4 py-2.5 rounded-xl bg-elevatedDark border border-neonViolet/40 text-neonViolet font-bold text-xs flex items-center gap-2 hover:bg-neonViolet/10 transition">
+            <i data-lucide="scan" class="w-4 h-4"></i> Scan Screenshot
+          </button>
+          <button onclick="toggleModal('add-modal')" class="px-5 py-3 rounded-xl bg-neonCyan text-bgDark font-bold text-sm flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-neonCyan/20">
+            <i data-lucide="plus" class="w-5 h-5"></i> Add Assignment
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div class="sm:col-span-2 relative">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3.5 text-textSecondary"></i>
+          <input type="text" id="search-input" oninput="renderAssignments()" placeholder="Search title or subject..." class="w-full pl-10 pr-4 py-2.5 rounded-xl glass-panel text-textPrimary placeholder-textSecondary text-sm focus:outline-none focus:border-neonCyan">
+        </div>
+        <select id="filter-status" onchange="renderAssignments()" class="px-4 py-2.5 rounded-xl glass-panel text-textPrimary text-sm focus:outline-none focus:border-neonCyan">
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="all">All Status</option>
+        </select>
+        <select id="sort-by" onchange="renderAssignments()" class="px-4 py-2.5 rounded-xl glass-panel text-textPrimary text-sm focus:outline-none focus:border-neonCyan">
+          <option value="priority">Sort by Urgency</option>
+          <option value="dueDate">Sort by Due Date</option>
+          <option value="title">Sort by Title</option>
+        </select>
+      </div>
+
+      <div id="full-assignment-list" class="space-y-4"></div>
+    </section>
+
+    <!-- NOTES PAGE -->
+    <section id="page-notes" class="hidden space-y-6">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="font-display text-3xl font-bold">Subject Notes</h1>
+          <p class="text-textSecondary text-sm mt-1">Keep comprehensive notes for every subject.</p>
+        </div>
+        <button onclick="createNewNote()" class="px-4 py-2.5 rounded-xl bg-neonCyan text-bgDark font-bold text-xs flex items-center gap-2 hover:opacity-95 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i> New Note
+        </button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-panel p-4 rounded-2xl space-y-2 max-h-[70vh] overflow-y-auto" id="notes-sidebar"></div>
+        <div class="md:col-span-2 glass-panel p-6 rounded-2xl space-y-4" id="notes-editor-container">
+          <div class="text-textSecondary text-center py-20">Select a note or create a new one to start writing.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLASHCARDS PAGE -->
+    <section id="page-flashcards" class="hidden space-y-6 max-w-3xl mx-auto">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="font-display text-3xl font-bold">Flashcards</h1>
+          <p class="text-textSecondary text-sm mt-1">Study vocabulary and key facts effortlessly.</p>
+        </div>
+        <button onclick="toggleModal('card-modal')" class="px-4 py-2.5 rounded-xl bg-neonViolet text-white font-bold text-xs flex items-center gap-2 hover:opacity-95 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Flashcard
+        </button>
+      </div>
+
+      <div id="flashcard-container" class="py-6 flex flex-col items-center justify-center min-h-[300px]">
+        <!-- Rendered active flashcard -->
+      </div>
+      <div class="flex justify-center gap-4">
+        <button onclick="prevCard()" class="px-5 py-2.5 rounded-xl bg-elevatedDark border border-white/10 text-xs font-bold hover:text-white">&larr; Previous</button>
+        <button onclick="flipCurrentCard()" class="px-6 py-2.5 rounded-xl bg-neonCyan text-bgDark font-bold text-xs hover:opacity-90">Flip Card</button>
+        <button onclick="nextCard()" class="px-5 py-2.5 rounded-xl bg-elevatedDark border border-white/10 text-xs font-bold hover:text-white">Next &rarr;</button>
+      </div>
+    </section>
+
+    <!-- PRACTICE QUIZ PAGE -->
+    <section id="page-quiz" class="hidden space-y-6 max-w-2xl mx-auto">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="font-display text-3xl font-bold">Practice Quiz</h1>
+          <p class="text-textSecondary text-sm mt-1">Test your knowledge with student-entered questions.</p>
+        </div>
+        <button onclick="toggleModal('quiz-modal')" class="px-4 py-2.5 rounded-xl bg-neonCyan text-bgDark font-bold text-xs flex items-center gap-2 hover:opacity-95 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Question
+        </button>
+      </div>
+
+      <div class="glass-panel p-8 rounded-3xl space-y-6 border-neonCyan/30" id="quiz-card-wrapper">
+        <div id="quiz-question-area" class="space-y-4">
+          <div class="text-xs text-neonCyan font-bold uppercase tracking-wider" id="quiz-progress-indicator">Question 1 of 1</div>
+          <h3 id="quiz-question-title" class="font-display text-xl font-bold">No quiz questions added yet!</h3>
+          <div id="quiz-options-list" class="space-y-3 pt-2"></div>
+        </div>
+        <div id="quiz-score-area" class="hidden text-center space-y-4 py-8">
+          <h3 class="font-display text-2xl font-bold text-neonGreen">Quiz Completed!</h3>
+          <p id="quiz-final-score" class="text-textSecondary text-sm">You scored -- out of --</p>
+          <button onclick="restartQuiz()" class="px-6 py-3 rounded-xl bg-neonViolet text-white font-bold text-xs">Try Again</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI STUDY BOT PAGE -->
+    <section id="page-bot" class="hidden space-y-6 max-w-3xl mx-auto">
+      <div>
+        <h1 class="font-display text-3xl font-bold flex items-center gap-2"><i data-lucide="bot" class="text-neonCyan w-7 h-7"></i> AI Study Bot</h1>
+        <p class="text-textSecondary text-sm mt-1">Ask questions, get scheduling advice, or request instant study breakdowns.</p>
+      </div>
+      <div class="glass-panel rounded-3xl p-6 flex flex-col h-[60vh] border-neonCyan/30">
+        <div id="bot-chat-history" class="flex-1 overflow-y-auto space-y-4 pr-2 text-xs">
+          <div class="p-3.5 rounded-2xl bg-elevatedDark border border-white/5 max-w-[85%] space-y-1">
+            <span class="text-[10px] text-neonCyan font-bold">DeadlineOS Study Assistant</span>
+            <p class="text-textPrimary">Hello! I am your built-in study bot. Ask me for study strategies, homework organization tips, or motivational boosts!</p>
+          </div>
+        </div>
+        <div class="pt-4 border-t border-white/5 flex gap-2">
+          <input type="text" id="bot-input" onkeydown="if(event.key==='Enter') sendBotMessage()" placeholder="Ask study bot anything..." class="flex-1 px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary outline-none focus:border-neonCyan">
+          <button onclick="sendBotMessage()" class="px-5 py-3 rounded-xl bg-neonCyan text-bgDark font-bold text-xs hover:opacity-90">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEEP WORK PAGE -->
+    <section id="page-focus" class="hidden space-y-6">
+      <div id="deep-work-workspace" class="glass-panel p-8 rounded-[2.5rem] border-neonViolet/30 max-w-3xl mx-auto space-y-8 relative overflow-hidden">
+        
+        <!-- Top Workspace Bar -->
+        <div class="flex justify-between items-center border-b border-white/5 pb-4">
+          <div>
+            <div id="dw-active-task-label" class="text-xs text-neonCyan font-bold uppercase tracking-wider">No Assignment Selected</div>
+            <h2 id="dw-task-title" class="font-display text-2xl font-bold mt-1">Deep Work Environment</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleFocusModeLayout()" id="focus-mode-toggle-btn" class="px-3 py-2 rounded-xl bg-elevatedDark border border-white/10 text-xs text-textSecondary hover:text-white transition flex items-center gap-1.5" title="Focus Mode: Hide Dashboard">
+              <i data-lucide="eye-off" class="w-4 h-4"></i> <span id="focus-mode-text">Focus Mode</span>
+            </button>
+            <button onclick="toggleFullscreen()" class="p-2.5 rounded-xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-white transition" title="Toggle Fullscreen">
+              <i data-lucide="maximize" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode Presets -->
+        <div class="flex flex-wrap gap-2 justify-center bg-bgDark p-2 rounded-2xl border border-white/5">
+          <button onclick="setTimerPreset('quick', 25, 5)" id="preset-quick" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-neonViolet text-white">Quick Focus (25m)</button>
+          <button onclick="setTimerPreset('deep', 50, 10)" id="preset-deep" class="px-4 py-2 rounded-xl text-xs font-bold transition text-textSecondary hover:text-white">Deep Work (50m)</button>
+          <button onclick="setTimerPreset('extended', 90, 20)" id="preset-extended" class="px-4 py-2 rounded-xl text-xs font-bold transition text-textSecondary hover:text-white">Extended (90m)</button>
+          <button onclick="setTimerPreset('stopwatch', 0, 0)" id="preset-stopwatch" class="px-4 py-2 rounded-xl text-xs font-bold transition text-textSecondary hover:text-white">Stopwatch</button>
+        </div>
+
+        <!-- Timer Display & Ring -->
+        <div class="flex flex-col items-center justify-center my-4">
+          <div class="relative w-64 h-64 flex items-center justify-center">
+            <svg class="w-full h-full" viewBox="0 0 100 100">
+              <circle class="text-bgDark" stroke-width="3" stroke="currentColor" fill="transparent" r="46" cx="50" cy="50"/>
+              <circle id="timer-ring" class="progress-ring__circle text-neonViolet" stroke-width="4" stroke-dasharray="289.02" stroke-dashoffset="0" stroke-linecap="round" stroke="currentColor" fill="transparent" r="46" cx="50" cy="50"/>
+            </svg>
+            <div class="absolute flex flex-col items-center">
+              <span id="timer-display" class="font-display text-6xl font-bold tracking-tighter text-textPrimary">25:00</span>
+              <span id="timer-status-text" class="text-[10px] text-textSecondary uppercase tracking-widest mt-1">Ready</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center justify-center gap-3">
+          <button onclick="toggleTimer()" id="timer-control-btn" class="px-8 py-4 rounded-2xl bg-neonViolet text-white font-bold text-sm flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-neonViolet/30">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            <span id="timer-btn-text">Start Focus</span>
+          </button>
+          <button onclick="resetTimer()" class="p-4 rounded-2xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-white transition" title="Reset">
+            <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+          </button>
+          <button onclick="finishSessionEarly()" class="p-4 rounded-2xl bg-statusWarning/10 border border-statusWarning/30 text-statusWarning hover:bg-statusWarning/20 transition" title="Finish Early">
+            <i data-lucide="check-circle" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Ambient Sound & SFX Controls -->
+        <div class="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-white/5">
+          <span class="text-xs text-textSecondary mr-2">Audio:</span>
+          <button onclick="setSound('silence')" id="sound-silence" class="px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-neonCyan border border-neonCyan/30">Silence</button>
+          <button onclick="setSound('rain')" id="sound-rain" class="px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-textSecondary hover:text-white">Rain</button>
+          <button onclick="setSound('brown')" id="sound-brown" class="px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-textSecondary hover:text-white">Brown Noise</button>
+          <button onclick="playCompletionSoundToggle()" id="sfx-toggle-btn" class="px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-neonViolet border border-neonViolet/30 ml-4">SFX: ON</button>
+        </div>
+
+        <!-- Checklist & Parking Lot Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/5">
+          <div class="bg-bgDark/60 p-5 rounded-2xl border border-white/5 space-y-3">
+            <div class="flex justify-between items-center">
+              <h4 class="font-display text-sm font-bold flex items-center gap-2">
+                <i data-lucide="check-square" class="w-4 h-4 text-neonCyan"></i> Session Checklist
+              </h4>
+            </div>
+            <div id="dw-checklist-items" class="space-y-2 max-h-40 overflow-y-auto"></div>
+            <div class="flex gap-2 pt-1">
+              <input type="text" id="dw-new-check-input" placeholder="Add step..." class="px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary flex-1 outline-none focus:border-neonCyan">
+              <button onclick="addDeepWorkChecklist()" class="px-3 py-2 bg-elevatedDark border border-white/10 rounded-xl text-xs font-bold hover:text-white">+</button>
+            </div>
+          </div>
+
+          <div class="bg-bgDark/60 p-5 rounded-2xl border border-white/5 space-y-3">
+            <div class="flex justify-between items-center">
+              <h4 class="font-display text-sm font-bold flex items-center gap-2">
+                <i data-lucide="bookmark" class="w-4 h-4 text-neonViolet"></i> Distraction Parking Lot
+              </h4>
+            </div>
+            <div id="parking-lot-items" class="space-y-2 max-h-40 overflow-y-auto text-xs text-textSecondary"></div>
+            <div class="flex gap-2 pt-1">
+              <input type="text" id="parking-input" placeholder="Park a stray thought..." class="px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary flex-1 outline-none focus:border-neonViolet">
+              <button onclick="parkThought()" class="px-3 py-2 bg-elevatedDark border border-white/10 rounded-xl text-xs font-bold hover:text-white">Park</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- WEEKLY CALENDAR MODAL -->
+  <div id="calendar-modal" class="hidden fixed inset-0 bg-bgDark/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-3xl rounded-3xl p-6 space-y-5 animate-modal-pop max-h-[95vh] overflow-y-auto border-neonCyan/40">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 class="font-display text-xl font-bold">7-Day Study Calendar</h3>
+        <button onclick="toggleCalendarModal()" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div id="weekly-calendar-grid" class="grid grid-cols-1 sm:grid-cols-7 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- ADD FLASHCARD MODAL -->
+  <div id="card-modal" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-md rounded-2xl p-6 space-y-4">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 class="font-display text-lg font-bold">New Flashcard</h3>
+        <button onclick="toggleModal('card-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-textSecondary mb-1 font-semibold">Front (Question / Prompt)</label>
+          <input type="text" id="card-front-input" class="w-full px-3 py-2.5 rounded-xl bg-bgDark border border-white/10 text-textPrimary outline-none focus:border-neonViolet" placeholder="e.g. What is mitochondria?">
+        </div>
+        <div>
+          <label class="block text-textSecondary mb-1 font-semibold">Back (Answer / Fact)</label>
+          <textarea id="card-back-input" class="w-full px-3 py-2.5 rounded-xl bg-bgDark border border-white/10 text-textPrimary outline-none focus:border-neonViolet h-20 resize-none" placeholder="Powerhouse of the cell"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button onclick="toggleModal('card-modal')" class="px-4 py-2 rounded-xl bg-bgDark text-textSecondary">Cancel</button>
+          <button onclick="saveFlashcard()" class="px-4 py-2 rounded-xl bg-neonViolet text-white font-bold">Add Card</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD QUIZ QUESTION MODAL -->
+  <div id="quiz-modal" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-md rounded-2xl p-6 space-y-4">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 class="font-display text-lg font-bold">New Quiz Question</h3>
+        <button onclick="toggleModal('quiz-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-textSecondary mb-1 font-semibold">Question</label>
+          <input type="text" id="quiz-q-input" class="w-full px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-textPrimary outline-none focus:border-neonCyan" placeholder="Question text...">
+        </div>
+        <div>
+          <label class="block text-textSecondary mb-1 font-semibold">Options (comma separated)</label>
+          <input type="text" id="quiz-opt-input" class="w-full px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-textPrimary outline-none focus:border-neonCyan" placeholder="Option A, Option B, Option C, Option D">
+        </div>
+        <div>
+          <label class="block text-textSecondary mb-1 font-semibold">Correct Answer Index (0 to 3)</label>
+          <input type="number" min="0" max="3" value="0" id="quiz-correct-input" class="w-full px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-textPrimary outline-none focus:border-neonCyan">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button onclick="toggleModal('quiz-modal')" class="px-4 py-2 rounded-xl bg-bgDark text-textSecondary">Cancel</button>
+          <button onclick="saveQuizQuestion()" class="px-4 py-2 rounded-xl bg-neonCyan text-bgDark font-bold">Save Question</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ASSIGNMENT DETAIL MODAL -->
+  <div id="detail-modal" class="hidden fixed inset-0 bg-bgDark/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 space-y-4 animate-modal-pop max-h-[95vh] overflow-y-auto border-neonViolet/30">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 id="detail-title" class="font-display text-xl font-bold">Assignment Details</h3>
+        <button onclick="toggleModal('detail-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div id="detail-content" class="space-y-4 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- SCREENSHOT SCANNING MODAL -->
+  <div id="ocr-modal" class="hidden fixed inset-0 bg-bgDark/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-xl rounded-3xl p-6 space-y-5 animate-modal-pop max-h-[95vh] overflow-y-auto border-neonViolet/30">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <div class="flex items-center gap-2">
+          <i data-lucide="scan" class="w-5 h-5 text-neonViolet"></i>
+          <h3 class="font-display text-xl font-bold">Screenshot Scanning</h3>
+        </div>
+        <button onclick="toggleModal('ocr-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+
+      <div id="ocr-drop-zone" class="p-8 rounded-2xl border-2 border-dashed border-neonViolet/50 bg-neonViolet/5 text-center space-y-4 relative overflow-hidden">
+        <i data-lucide="camera" class="w-12 h-12 text-neonViolet mx-auto animate-pulse"></i>
+        <div>
+          <div class="font-bold text-sm text-textPrimary">Upload Assignment Screenshot</div>
+          <div class="text-xs text-textSecondary mt-1">Supports PNG, JPG, WEBP • Accurate deadline & instruction extraction</div>
+        </div>
+        <label class="inline-block px-6 py-3 rounded-xl bg-neonViolet text-white font-bold text-xs cursor-pointer hover:opacity-90 shadow-lg shadow-neonViolet/30 transition">
+          Browse Image File
+          <input type="file" id="ocr-file-input" accept="image/*" onchange="handleOCRFileUpload(event)" class="hidden">
+        </label>
+        <div id="ocr-progress-status" class="text-xs font-mono font-bold text-neonCyan hidden">Scanning screenshot...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT ASSIGNMENT MODAL -->
+  <div id="add-modal" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-lg rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-modal-pop">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 id="modal-title" class="font-display text-xl font-bold">New Assignment</h3>
+        <button onclick="toggleModal('add-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <form id="assignment-form" onsubmit="handleSaveAssignment(event)" class="space-y-4">
+        <input type="hidden" id="form-edit-id" value="">
+        <div>
+          <label class="block text-xs font-semibold text-textSecondary mb-1">Title *</label>
+          <input type="text" id="form-title" required placeholder="e.g. Calculus Problem Set" class="w-full px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-textSecondary mb-1">Subject *</label>
+            <input type="text" id="form-subject" required placeholder="e.g. Mathematics" class="w-full px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-textSecondary mb-1">Priority</label>
+            <select id="form-priority" class="w-full px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none">
+              <option value="1">Low</option>
+              <option value="2" selected>Medium</option>
+              <option value="3">High</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-textSecondary mb-1">Due Date & Time *</label>
+            <input type="datetime-local" id="form-duedate" required class="w-full px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none text-textSecondary">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-textSecondary mb-1">Est. Duration (Hours) *</label>
+            <input type="number" step="0.5" id="form-duration" required placeholder="1.5" class="w-full px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-textSecondary mb-1">Instructions / Notes</label>
+          <textarea id="form-notes" placeholder="Additional details or instructions..." class="w-full px-4 py-2.5 rounded-xl bg-bgDark border border-white/10 text-sm focus:border-neonCyan outline-none h-20 resize-none"></textarea>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModal('add-modal')" class="px-4 py-2.5 rounded-xl bg-bgDark text-xs font-semibold text-textSecondary hover:text-white">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl bg-neonCyan text-bgDark font-bold text-xs hover:opacity-90 transition">Save Assignment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-lg rounded-2xl p-6 space-y-5 animate-modal-pop max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center pb-3 border-b border-white/5">
+        <h3 class="font-display text-xl font-bold">Settings & Stats</h3>
+        <button onclick="toggleModal('settings-modal')" class="text-textSecondary hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="p-4 rounded-xl bg-bgDark border border-white/5 space-y-2">
+          <div class="font-bold text-textPrimary">Gamification & XP</div>
+          <div class="flex justify-between text-textSecondary"><span>Current XP:</span> <span id="settings-xp" class="text-neonViolet font-bold">0 XP</span></div>
+          <div class="flex justify-between text-textSecondary"><span>Level:</span> <span id="settings-level" class="text-neonCyan font-bold">1</span></div>
+        </div>
+        <div class="space-y-2 pt-2 border-t border-white/5">
+          <label class="block text-textSecondary font-semibold">Data Backup</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="exportData()" class="py-2.5 rounded-xl bg-bgDark border border-white/10 hover:border-neonCyan text-textPrimary font-semibold flex items-center justify-center gap-2">
+              <i data-lucide="download" class="w-4 h-4"></i> Export JSON
+            </button>
+            <label class="py-2.5 rounded-xl bg-bgDark border border-white/10 hover:border-neonCyan text-textPrimary font-semibold flex items-center justify-center gap-2 cursor-pointer text-center">
+              <i data-lucide="upload" class="w-4 h-4"></i> Import JSON
+              <input type="file" accept=".json" onchange="importData(event)" class="hidden">
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT ENGINE -->
+  <script>
+    const SCHEMA_VERSION = 3;
+    let loadWarning = '';
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function localDateStr(d = new Date()) {
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+
+    function safeParse(key, fallback) {
+      let raw = null;
+      try { raw = localStorage.getItem(key); } catch (e) { return fallback; }
+      if (raw === null) return fallback;
+      try {
+        const val = JSON.parse(raw);
+        return (val !== null && typeof val === 'object') ? val : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function safeId(id) {
+      const s = String(id == null ? '' : id).replace(/[^A-Za-z0-9_-]/g, '');
+      return s || (Date.now().toString() + Math.random().toString(36).slice(2, 7));
+    }
+
+    function normalizeDueDate(v) {
+      const s = String(v == null ? '' : v).trim();
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return s;
+      const d = new Date(s);
+      if (!s || isNaN(d.getTime())) return `${localDateStr()}T23:59`;
+      return `${localDateStr(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+
+    function loadAllData() {
+      const rawTasks = safeParse('dlos_v5_tasks', []);
+      const rawNotes = safeParse('dlos_v5_notes', [{ id: '1', title: 'General Study Notes', subject: 'General', content: 'Welcome to your notes! Keep track of facts here.' }]);
+      const rawCards = safeParse('dlos_v5_cards', [{ id: '1', front: 'What is DeadlineOS?', back: 'Ultimate Student Productivity OS' }]);
+      const rawQuiz = safeParse('dlos_v5_quiz', [{ id: '1', q: 'What is 2 + 2?', options: ['3', '4', '5', '6'], correct: 1 }]);
+      const gamification = safeParse('dlos_v5_game', { xp: 0, level: 1 });
+      const stats = safeParse('dlos_v5_stats', { sessions: [] });
+      return { assignments: Array.isArray(rawTasks) ? rawTasks : [], notes: Array.isArray(rawNotes) ? rawNotes : [], cards: Array.isArray(rawCards) ? rawCards : [], quiz: Array.isArray(rawQuiz) ? rawQuiz : [], game: gamification, stats };
+    }
+
+    const initialData = loadAllData();
+    let assignments = initialData.assignments;
+    let notes = initialData.notes;
+    let flashcards = initialData.cards;
+    let quizQuestions = initialData.quiz;
+    let gameData = initialData.game;
+    let stats = initialData.stats;
+
+    let currentFocusId = null;
+    let timerInterval = null;
+    let totalSeconds = 25 * 60;
+    let remainingSeconds = 25 * 60;
+    let isTimerRunning = false;
+    let timerMode = 'quick';
+    let activeSound = 'silence';
+    let sfxEnabled = true;
+    let isFocusModeActive = false;
+    let currentCardIdx = 0;
+    let currentCardFlipped = false;
+    let currentQuizIdx = 0;
+    let quizScore = 0;
+    let activeNoteId = null;
+    let audioCtx = null;
+    let noiseNode = null;
+    let motivationalInterval = null;
+
+    const motivationalQuotes = [
+      "Keep pushing forward! You're making incredible progress.",
+      "Consistency is the key to mastering any subject.",
+      "Every minute of focus brings you closer to your goals.",
+      "Great job staying on task! Take a quick breath.",
+      "Excellence is not an act, but a habit."
+    ];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initParticles();
+      updateGreeting();
+      renderAll();
+      if (notes.length > 0) selectNote(notes[0].id);
+
+      // Motivational messages every 9 minutes
+      motivationalInterval = setInterval(() => {
+        if (isTimerRunning) {
+          const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+          showToast(randomQuote, 'success');
+        }
+      }, 9 * 60 * 1000);
+
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+          e.preventDefault();
+          toggleCommandPalette();
+        }
+        if (e.key === 'Escape') {
+          document.getElementById('command-palette').classList.add('hidden');
+        }
+      });
+    });
+
+    function updateGreeting() {
+      const h = new Date().getHours();
+      const text = h < 5 ? "Up late? Let's make it count."
+        : (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + '. Ready to make progress?';
+      const el = document.getElementById('greeting');
+      if (el) el.textContent = text;
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const borderColor = type === 'success' ? 'border-neonCyan/40 text-neonCyan' : 'border-statusWarning/40 text-statusWarning';
+      toast.className = `glass-panel px-4 py-3 rounded-xl border ${borderColor} text-xs font-bold toast-animate shadow-xl flex items-center gap-2 pointer-events-auto`;
+      toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-4 h-4"></i> <span>${escapeHTML(message)}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.toString().replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    function addXP(amount) {
+      gameData.xp += amount;
+      if (gameData.xp >= gameData.level * 150) {
+        gameData.level += 1;
+        showToast(`🎉 Level Up! You reached Level ${gameData.level}!`, 'success');
+        playCompletionSound();
+      }
+      saveData();
+      updateGamificationDisplay();
+    }
+
+    function updateGamificationDisplay() {
+      document.getElementById('nav-xp').textContent = gameData.xp;
+      document.getElementById('nav-level').textContent = gameData.level;
+      if (document.getElementById('settings-xp')) {
+        document.getElementById('settings-xp').textContent = gameData.xp + ' XP';
+        document.getElementById('settings-level').textContent = gameData.level;
+      }
+    }
+
+    // --- NAVIGATION & TABS ---
+    function switchTab(tab) {
+      ['home', 'assignments', 'notes', 'flashcards', 'quiz', 'bot', 'focus'].forEach(t => {
+        const page = document.getElementById(`page-${t}`);
+        const btn = document.getElementById(`tab-${t}`);
+        if(page) page.classList.add('hidden');
+        if(btn) btn.className = "nav-btn px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-textSecondary hover:text-textPrimary transition-all duration-300";
+      });
+      document.getElementById(`page-${tab}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tab}`);
+      if(activeBtn) activeBtn.className = `nav-btn px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-neonViolet text-white shadow-lg shadow-neonViolet/20 transition-all duration-300`;
+      
+      if (tab === 'focus') initDeepWorkWorkspace();
+      if (tab === 'flashcards') renderCurrentCard();
+      if (tab === 'quiz') renderQuizQuestion();
+      if (tab === 'notes') renderNotesSidebar();
+    }
+
+    function toggleModal(id) {
+      document.getElementById(id).classList.toggle('hidden');
+      if(id === 'add-modal' && !document.getElementById('add-modal').classList.contains('hidden')) {
+        document.getElementById('assignment-form').reset();
+        document.getElementById('form-edit-id').value = '';
+        document.getElementById('modal-title').textContent = 'New Assignment';
+      }
+    }
+
+    function toggleCalendarModal() {
+      renderWeeklyCalendar();
+      document.getElementById('calendar-modal').classList.toggle('hidden');
+    }
+
+    function openOCRModal() {
+      toggleModal('ocr-modal');
+    }
+
+    // --- NOTES SYSTEM ---
+    function renderNotesSidebar() {
+      const sb = document.getElementById('notes-sidebar');
+      sb.innerHTML = '';
+      if (notes.length === 0) {
+        sb.innerHTML = '<div class="text-xs text-textSecondary italic">No notes found.</div>';
+        return;
+      }
+      notes.forEach(n => {
+        sb.innerHTML += `
+          <div onclick="selectNote('${n.id}')" class="p-3 rounded-xl bg-bgDark border ${activeNoteId === n.id ? 'border-neonCyan' : 'border-white/5'} cursor-pointer hover:border-white/20 transition space-y-1">
+            <div class="font-bold text-textPrimary text-xs">${escapeHTML(n.title)}</div>
+            <div class="text-[10px] text-textSecondary">${escapeHTML(n.subject)}</div>
+          </div>
+        `;
+      });
+    }
+
+    function createNewNote() {
+      const newN = { id: Date.now().toString(), title: 'Untitled Note', subject: 'General', content: '' };
+      notes.push(newN);
+      saveData();
+      selectNote(newN.id);
+      renderNotesSidebar();
+      showToast("New note created.", "success");
+    }
+
+    function selectNote(id) {
+      activeNoteId = id;
+      renderNotesSidebar();
+      const n = notes.find(x => x.id === id);
+      const container = document.getElementById('notes-editor-container');
+      if (!n) return;
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <input type="text" id="note-title-input" value="${escapeHTML(n.title)}" oninput="updateActiveNote()" class="px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-xs font-bold text-textPrimary outline-none focus:border-neonCyan" placeholder="Note Title...">
+            <input type="text" id="note-subject-input" value="${escapeHTML(n.subject)}" oninput="updateActiveNote()" class="px-3 py-2 rounded-xl bg-bgDark border border-white/10 text-xs font-bold text-textPrimary outline-none focus:border-neonCyan" placeholder="Subject...">
+          </div>
+          <textarea id="note-content-input" oninput="updateActiveNote()" class="w-full h-80 px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary outline-none focus:border-neonCyan resize-none" placeholder="Write your notes here...">${escapeHTML(n.content)}</textarea>
+          <div class="flex justify-between items-center">
+            <button onclick="deleteNote('${n.id}')" class="text-xs text-red-400 hover:underline">Delete Note</button>
+            <span class="text-[10px] text-textSecondary">Auto-saved</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateActiveNote() {
+      const n = notes.find(x => x.id === activeNoteId);
+      if (!n) return;
+      n.title = document.getElementById('note-title-input').value;
+      n.subject = document.getElementById('note-subject-input').value;
+      n.content = document.getElementById('note-content-input').value;
+      saveData();
+      renderNotesSidebar();
+    }
+
+    function deleteNote(id) {
+      notes = notes.filter(x => x.id !== id);
+      saveData();
+      if (notes.length > 0) selectNote(notes[0].id);
+      else document.getElementById('notes-editor-container').innerHTML = '<div class="text-textSecondary text-center py-20">No notes available.</div>';
+      renderNotesSidebar();
+      showToast("Note deleted.", "error");
+    }
+
+    // --- FLASHCARDS SYSTEM ---
+    function renderCurrentCard() {
+      const container = document.getElementById('flashcard-container');
+      if (flashcards.length === 0) {
+        container.innerHTML = '<div class="text-xs text-textSecondary italic text-center">No flashcards available. Click Add Flashcard to create one.</div>';
+        return;
+      }
+      const card = flashcards[currentCardIdx];
+      container.innerHTML = `
+        <div onclick="flipCurrentCard()" class="flip-card w-full max-w-md h-64 cursor-pointer ${currentCardFlipped ? 'flipped' : ''}">
+          <div class="flip-card-inner relative w-full h-full text-center">
+            <div class="flip-front glass-panel rounded-3xl p-8 flex flex-col items-center justify-center border-neonViolet/40 shadow-xl">
+              <span class="text-[10px] text-neonViolet font-bold uppercase tracking-wider mb-2">Card ${currentCardIdx + 1} of ${flashcards.length} (Front)</span>
+              <h3 class="font-display text-xl font-bold">${escapeHTML(card.front)}</h3>
+              <span class="text-[10px] text-textSecondary mt-4">Click to flip</span>
+            </div>
+            <div class="flip-back glass-panel rounded-3xl p-8 flex flex-col items-center justify-center border-neonCyan/40 shadow-xl bg-cardDark">
+              <span class="text-[10px] text-neonCyan font-bold uppercase tracking-wider mb-2">Card ${currentCardIdx + 1} of ${flashcards.length} (Back)</span>
+              <p class="text-sm text-textPrimary">${escapeHTML(card.back)}</p>
+              <span class="text-[10px] text-textSecondary mt-4">Click to flip</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function flipCurrentCard() {
+      currentCardFlipped = !currentCardFlipped;
+      renderCurrentCard();
+    }
+
+    function nextCard() {
+      currentCardFlipped = false;
+      currentCardIdx = (currentCardIdx + 1) % flashcards.length;
+      renderCurrentCard();
+    }
+
+    function prevCard() {
+      currentCardFlipped = false;
+      currentCardIdx = (currentCardIdx - 1 + flashcards.length) % flashcards.length;
+      renderCurrentCard();
+    }
+
+    function saveFlashcard() {
+      const front = document.getElementById('card-front-input').value.trim();
+      const back = document.getElementById('card-back-input').value.trim();
+      if (!front || !back) {
+        showToast("Please fill in both fields.", "error");
+        return;
+      }
+      flashcards.push({ id: Date.now().toString(), front, back });
+      saveData();
+      toggleModal('card-modal');
+      document.getElementById('card-front-input').value = '';
+      document.getElementById('card-back-input').value = '';
+      renderCurrentCard();
+      showToast("Flashcard added successfully!", "success");
+    }
+
+    // --- PRACTICE QUIZ SYSTEM ---
+    function renderQuizQuestion() {
+      const container = document.getElementById('quiz-options-list');
+      const title = document.getElementById('quiz-question-title');
+      const progress = document.getElementById('quiz-progress-indicator');
+      const scoreArea = document.getElementById('quiz-score-area');
+      const questionArea = document.getElementById('quiz-question-area');
+
+      if (quizQuestions.length === 0) {
+        questionArea.classList.remove('hidden');
+        scoreArea.classList.add('hidden');
+        title.textContent = "No quiz questions available!";
+        container.innerHTML = '<p class="text-xs text-textSecondary">Click Add Question above to create a custom practice quiz.</p>';
+        progress.textContent = "0 of 0";
+        return;
+      }
+
+      if (currentQuizIdx >= quizQuestions.length) {
+        questionArea.classList.add('hidden');
+        scoreArea.classList.remove('hidden');
+        document.getElementById('quiz-final-score').textContent = `You scored ${quizScore} out of ${quizQuestions.length} correct!`;
+        addXP(quizScore * 25);
+        return;
+      }
+
+      questionArea.classList.remove('hidden');
+      scoreArea.classList.add('hidden');
+      const q = quizQuestions[currentQuizIdx];
+      progress.textContent = `Question ${currentQuizIdx + 1} of ${quizQuestions.length}`;
+      title.textContent = q.q;
+      container.innerHTML = '';
+      q.options.forEach((opt, idx) => {
+        container.innerHTML += `
+          <button onclick="answerQuiz(${idx}, ${q.correct})" class="w-full p-3.5 rounded-xl bg-bgDark border border-white/5 text-xs text-left font-semibold hover:border-neonCyan transition text-textPrimary">${escapeHTML(opt)}</button>
+        `;
+      });
+    }
+
+    function answerQuiz(selected, correct) {
+      if (selected === correct) {
+        quizScore++;
+        showToast("Correct!", "success");
+      } else {
+        showToast("Incorrect.", "error");
+      }
+      currentQuizIdx++;
+      renderQuizQuestion();
+    }
+
+    function restartQuiz() {
+      currentQuizIdx = 0;
+      quizScore = 0;
+      renderQuizQuestion();
+    }
+
+    function saveQuizQuestion() {
+      const q = document.getElementById('quiz-q-input').value.trim();
+      const opts = document.getElementById('quiz-opt-input').value.split(',').map(s => s.trim()).filter(Boolean);
+      const correct = parseInt(document.getElementById('quiz-correct-input').value) || 0;
+
+      if (!q || opts.length < 2) {
+        showToast("Please enter a question and at least 2 options.", "error");
+        return;
+      }
+
+      quizQuestions.push({ id: Date.now().toString(), q, options: opts, correct });
+      saveData();
+      toggleModal('quiz-modal');
+      document.getElementById('quiz-q-input').value = '';
+      document.getElementById('quiz-opt-input').value = '';
+      renderQuizQuestion();
+      showToast("Question added to quiz!", "success");
+    }
+
+    // --- AI STUDY BOT SYSTEM ---
+    function sendBotMessage() {
+      const input = document.getElementById('bot-input');
+      const txt = input.value.trim();
+      if (!txt) return;
+
+      const history = document.getElementById('bot-chat-history');
+      history.innerHTML += `
+        <div class="p-3.5 rounded-2xl bg-bgDark border border-white/5 max-w-[85%] ml-auto space-y-1">
+          <span class="text-[10px] text-neonViolet font-bold">You</span>
+          <p class="text-textPrimary">${escapeHTML(txt)}</p>
+        </div>
+      `;
+      input.value = '';
+      history.scrollTop = history.scrollHeight;
+
+      setTimeout(() => {
+        let reply = "That's a great question! Make sure to break your tasks down into 25-minute focus intervals and use the flashcards tab for active recall.";
+        const lower = txt.toLowerCase();
+        if (lower.includes('schedule') || lower.includes('plan')) {
+          reply = "Check your Home briefing for automated priority tasks. Focus on high urgency homework first!";
+        } else if (lower.includes('motivation') || lower.includes('tired')) {
+          reply = "You've got this! Take a 5-minute breather, drink some water, and crush your next goal.";
+        } else if (lower.includes('exam') || lower.includes('test')) {
+          reply = "For exams, practice active recall using the Flashcards and Quiz modules built into DeadlineOS!";
+        }
+
+        history.innerHTML += `
+          <div class="p-3.5 rounded-2xl bg-elevatedDark border border-white/5 max-w-[85%] space-y-1">
+            <span class="text-[10px] text-neonCyan font-bold">DeadlineOS Study Assistant</span>
+            <p class="text-textPrimary">${escapeHTML(reply)}</p>
+          </div>
+        `;
+        history.scrollTop = history.scrollHeight;
+      }, 600);
+    }
+
+    // --- DEEP WORK WORKSPACE & TIMER ---
+    function initDeepWorkWorkspace() {
+      const task = assignments.find(a => a.id === currentFocusId);
+      if (task) {
+        document.getElementById('dw-active-task-label').textContent = `Target: ${task.subject}`;
+        document.getElementById('dw-task-title').textContent = task.title;
+      } else {
+        document.getElementById('dw-active-task-label').textContent = "General Focus Session";
+        document.getElementById('dw-task-title').textContent = "Deep Work Environment";
+      }
+      updateTimerDisplay();
+    }
+
+    function setTimerPreset(mode, mins, breakMins) {
+      timerMode = mode;
+      pauseTimer();
+      ['quick', 'deep', 'extended', 'stopwatch'].forEach(m => {
+        const btn = document.getElementById(`preset-${m}`);
+        if(btn) btn.className = m === mode ? "px-4 py-2 rounded-xl text-xs font-bold transition bg-neonViolet text-white" : "px-4 py-2 rounded-xl text-xs font-bold transition text-textSecondary hover:text-white";
+      });
+
+      if (mode === 'stopwatch') {
+        totalSeconds = 0;
+        remainingSeconds = 0;
+        document.getElementById('timer-display').textContent = "00:00";
+        document.getElementById('timer-status-text').textContent = "Stopwatch";
+      } else {
+        totalSeconds = mins * 60;
+        remainingSeconds = totalSeconds;
+        updateTimerDisplay();
+        document.getElementById('timer-status-text').textContent = "Ready";
+      }
+    }
+
+    function toggleTimer() {
+      if (isTimerRunning) pauseTimer();
+      else startTimer();
+    }
+
+    function startTimer() {
+      isTimerRunning = true;
+      document.getElementById('timer-btn-text').textContent = 'Pause';
+      document.getElementById('timer-status-text').textContent = 'In Progress';
+
+      timerInterval = setInterval(() => {
+        if (timerMode === 'stopwatch') {
+          remainingSeconds++;
+          updateTimerDisplay();
+        } else {
+          if (remainingSeconds > 0) {
+            remainingSeconds--;
+            updateTimerDisplay();
+          } else {
+            pauseTimer();
+            playCompletionSound();
+            logCompletedSession(Math.round(totalSeconds / 60));
+            addXP(100);
+            showToast("Deep Work session completed! +100 XP", "success");
+            resetTimer();
+          }
+        }
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      isTimerRunning = false;
+      clearInterval(timerInterval);
+      document.getElementById('timer-btn-text').textContent = 'Resume';
+      document.getElementById('timer-status-text').textContent = 'Paused';
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      if (timerMode === 'stopwatch') {
+        remainingSeconds = 0;
+        document.getElementById('timer-display').textContent = "00:00";
+      } else {
+        remainingSeconds = totalSeconds;
+        updateTimerDisplay();
+      }
+      document.getElementById('timer-btn-text').textContent = 'Start Focus';
+      document.getElementById('timer-status-text').textContent = 'Ready';
+    }
+
+    function finishSessionEarly() {
+      const workedMins = timerMode === 'stopwatch' ? Math.round(remainingSeconds / 60) : Math.round((totalSeconds - remainingSeconds) / 60);
+      if (workedMins > 0) {
+        logCompletedSession(workedMins);
+        addXP(workedMins * 2);
+        playCompletionSound();
+        showToast(`Session logged: ${workedMins} mins.`, "success");
+      }
+      resetTimer();
+      switchTab('home');
+    }
+
+    function logCompletedSession(mins) {
+      if (mins <= 0) return;
+      stats.sessions.push({ date: localDateStr(), duration: mins, taskId: currentFocusId });
+      saveData();
+    }
+
+    function updateTimerDisplay() {
+      const m = Math.floor(remainingSeconds / 60).toString().padStart(2, '0');
+      const s = (remainingSeconds % 60).toString().padStart(2, '0');
+      document.getElementById('timer-display').textContent = `${m}:${s}`;
+      const r = document.getElementById('timer-ring');
+      if (totalSeconds > 0 && r) {
+        r.style.strokeDashoffset = 289.02 - (remainingSeconds / totalSeconds) * 289.02;
+      }
+    }
+
+    function toggleFocusModeLayout() {
+      isFocusModeActive = !isFocusModeActive;
+      const navHeader = document.getElementById('main-nav-header');
+      const toggleBtnText = document.getElementById('focus-mode-text');
+      if (isFocusModeActive) {
+        navHeader.style.display = 'none';
+        toggleBtnText.textContent = 'Exit Focus Mode';
+        showToast("Focus Mode active: Dashboard elements hidden.", "success");
+      } else {
+        navHeader.style.display = 'flex';
+        toggleBtnText.textContent = 'Focus Mode';
+      }
+    }
+
+    function toggleFullscreen() {
+      const ws = document.getElementById('deep-work-workspace');
+      if (!document.fullscreenElement) ws.requestFullscreen().catch(err => {});
+      else document.exitFullscreen();
+    }
+
+    // --- SOUND EFFECTS & AMBIENT AUDIO ---
+    function setSound(type) {
+      activeSound = type;
+      ['silence', 'rain', 'brown'].forEach(s => {
+        const btn = document.getElementById(`sound-${s}`);
+        if(btn) btn.className = s === type ? "px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-neonCyan border border-neonCyan/30" : "px-3 py-1.5 rounded-lg bg-bgDark text-xs font-semibold text-textSecondary hover:text-white";
+      });
+
+      if (noiseNode) {
+        noiseNode.stop();
+        noiseNode = null;
+      }
+      if (type === 'silence') return;
+
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufSize = audioCtx.sampleRate * 2;
+        const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+        const out = buf.getChannelData(0);
+        let lastOut = 0.0;
+        for (let i = 0; i < bufSize; i++) {
+          let white = Math.random() * 2 - 1;
+          if (type === 'brown') {
+            out[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = out[i];
+            out[i] *= 3.5;
+          } else {
+            out[i] = white * 0.05;
+          }
+        }
+        noiseNode = audioCtx.createBufferSource();
+        noiseNode.buffer = buf;
+        noiseNode.loop = true;
+        noiseNode.connect(audioCtx.destination);
+        noiseNode.start();
+      } catch (e) {}
+    }
+
+    function playCompletionSound() {
+      if (!sfxEnabled) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.setValueAtTime(587.33, ctx.currentTime);
+        o.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+        g.gain.setValueAtTime(0.3, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        o.start(); o.stop(ctx.currentTime + 0.8);
+      } catch (e) {}
+    }
+
+    function playCompletionSoundToggle() {
+      sfxEnabled = !sfxEnabled;
+      const btn = document.getElementById('sfx-toggle-btn');
+      btn.textContent = sfxEnabled ? "SFX: ON" : "SFX: OFF";
+      showToast(`Sound effects ${sfxEnabled ? 'enabled' : 'disabled'}.`, "success");
+    }
+
+    // --- CHECKLIST & PARKING LOT ---
+    let sessionChecklist = [];
+    let distractionParkingLot = [];
+
+    function addDeepWorkChecklist() {
+      const input = document.getElementById('dw-new-check-input');
+      if (!input.value.trim()) return;
+      sessionChecklist.push({ title: input.value.trim(), done: false });
+      input.value = '';
+      renderDeepWorkChecklist();
+    }
+
+    function renderDeepWorkChecklist() {
+      const container = document.getElementById('dw-checklist-items');
+      container.innerHTML = sessionChecklist.length === 0 ? '<div class="text-xs text-textSecondary italic">No checklist items.</div>' : '';
+      sessionChecklist.forEach((st, idx) => {
+        container.innerHTML += `
+          <div class="flex items-center justify-between text-xs">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" ${st.done ? 'checked' : ''} onchange="sessionChecklist[${idx}].done = this.checked" class="accent-neonCyan rounded">
+              <span class="${st.done ? 'line-through text-textSecondary opacity-50' : 'text-textPrimary'}">${escapeHTML(st.title)}</span>
+            </label>
+            <button onclick="sessionChecklist.splice(${idx}, 1); renderDeepWorkChecklist();" class="text-textSecondary hover:text-red-400">&times;</button>
+          </div>
+        `;
+      });
+    }
+
+    function parkThought() {
+      const input = document.getElementById('parking-input');
+      if (!input.value.trim()) return;
+      distractionParkingLot.push({ text: input.value.trim() });
+      input.value = '';
+      renderParkingLot();
+      showToast("Thought parked safely.", "success");
+    }
+
+    function renderParkingLot() {
+      const container = document.getElementById('parking-lot-items');
+      container.innerHTML = distractionParkingLot.length === 0 ? '<div class="text-xs text-textSecondary italic">Parking lot is clear.</div>' : '';
+      distractionParkingLot.forEach((item, idx) => {
+        container.innerHTML += `
+          <div class="flex justify-between items-center bg-bgDark p-2 rounded-lg border border-white/5">
+            <span>${escapeHTML(item.text)}</span>
+            <button onclick="distractionParkingLot.splice(${idx}, 1); renderParkingLot();" class="text-textSecondary hover:text-white">&times;</button>
+          </div>
+        `;
+      });
+    }
+
+    // --- CALENDAR & ASSIGNMENTS ---
+    function renderWeeklyCalendar() {
+      const grid = document.getElementById('weekly-calendar-grid');
+      grid.innerHTML = '';
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const today = new Date();
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date();
+        d.setDate(today.getDate() + i);
+        const dateStr = localDateStr(d);
+        const dayTasks = assignments.filter(a => !a.completed && a.dueDate.startsWith(dateStr));
+
+        const col = document.createElement('div');
+        col.className = "glass-panel p-3 rounded-2xl border border-white/5 space-y-2 min-h-[140px]";
+        col.innerHTML = `
+          <div class="font-bold text-xs text-neonCyan border-b border-white/5 pb-1">${days[d.getDay()]} ${d.getDate()}</div>
+          <div class="space-y-1">
+            ${dayTasks.length === 0 ? '<div class="text-[10px] text-textSecondary italic">No deadlines</div>' : ''}
+            ${dayTasks.map(t => `<div class="p-1.5 rounded bg-bgDark text-[10px] text-textPrimary truncate" title="${escapeHTML(t.title)}">${escapeHTML(t.title)}</div>`).join('')}
+          </div>
+        `;
+        grid.appendChild(col);
+      }
+    }
+
+    function handleSaveAssignment(e) {
+      e.preventDefault();
+      const editId = document.getElementById('form-edit-id').value;
+      const title = document.getElementById('form-title').value.trim();
+      const subject = document.getElementById('form-subject').value.trim();
+      const priority = parseInt(document.getElementById('form-priority').value);
+      const dueDate = document.getElementById('form-duedate').value;
+      const duration = parseFloat(document.getElementById('form-duration').value);
+      const notes = document.getElementById('form-notes').value.trim();
+
+      if (!title || !subject || !dueDate || isNaN(duration)) {
+        showToast("Please fill in all required fields.", "error");
+        return;
+      }
+
+      if (editId) {
+        assignments = assignments.map(a => a.id === editId ? { ...a, title, subject, priority, dueDate, duration, notes } : a);
+        showToast("Assignment updated!", "success");
+      } else {
+        assignments.push({ id: Date.now().toString(), title, subject, priority, dueDate, duration, notes, completed: false });
+        addXP(50);
+        playCompletionSound();
+        showToast("Assignment added! +50 XP", "success");
+      }
+
+      saveData();
+      toggleModal('add-modal');
+      renderAll();
+    }
+
+    function editAssignment(id) {
+      const task = assignments.find(a => a.id === id);
+      if (!task) return;
+      document.getElementById('form-edit-id').value = task.id;
+      document.getElementById('form-title').value = task.title;
+      document.getElementById('form-subject').value = task.subject;
+      document.getElementById('form-priority').value = task.priority;
+      document.getElementById('form-duedate').value = task.dueDate;
+      document.getElementById('form-duration').value = task.duration;
+      document.getElementById('form-notes').value = task.notes || '';
+      document.getElementById('modal-title').textContent = 'Edit Assignment';
+      document.getElementById('add-modal').classList.remove('hidden');
+    }
+
+    function toggleComplete(id) {
+      let task = assignments.find(a => a.id === id);
+      if (!task) return;
+      task.completed = !task.completed;
+      if (task.completed) {
+        addXP(75);
+        playCompletionSound();
+        showToast(`Completed: ${task.title} (+75 XP)`, "success");
+      }
+      saveData();
+      renderAll();
+    }
+
+    function deleteAssignment(id) {
+      if (confirm("Delete this assignment?")) {
+        assignments = assignments.filter(a => a.id !== id);
+        saveData();
+        renderAll();
+        showToast("Assignment deleted.", "error");
+      }
+    }
+
+    function openAssignmentDetail(id) {
+      const task = assignments.find(a => a.id === id);
+      if (!task) return;
+      document.getElementById('detail-title').textContent = task.title;
+      document.getElementById('detail-content').innerHTML = `
+        <div class="space-y-3">
+          <div><span class="text-textSecondary text-xs">Subject:</span> <span class="font-bold">${escapeHTML(task.subject)}</span></div>
+          <div><span class="text-textSecondary text-xs">Due Date:</span> <span class="font-bold">${new Date(task.dueDate).toLocaleString()}</span></div>
+          <div><span class="text-textSecondary text-xs">Est. Duration:</span> <span class="font-bold">${task.duration} hrs</span></div>
+          <div><span class="text-textSecondary text-xs">Notes:</span><div class="p-3 rounded-xl bg-bgDark mt-1 text-xs text-textSecondary">${escapeHTML(task.notes || 'None')}</div></div>
+          <div class="flex gap-2 pt-2">
+            <button onclick="toggleModal('detail-modal'); editAssignment('${task.id}')" class="flex-1 py-2 rounded-xl bg-elevatedDark border border-white/10 text-xs font-bold text-textPrimary">Edit</button>
+            <button onclick="toggleModal('detail-modal'); currentFocusId='${task.id}'; switchTab('focus');" class="flex-1 py-2 rounded-xl bg-neonViolet text-xs font-bold text-white">Start Deep Work</button>
+          </div>
+        </div>
+      `;
+      toggleModal('detail-modal');
+    }
+
+    // --- SCREENSHOT SCANNING ---
+    async function handleOCRFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const status = document.getElementById('ocr-progress-status');
+      status.classList.remove('hidden');
+      status.textContent = "Scanning screenshot...";
+
+      try {
+        const worker = await Tesseract.createWorker('eng');
+        const ret = await worker.recognize(file);
+        await worker.terminate();
+
+        const rawText = ret.data.text || 'Scanned Assignment';
+        assignments.push({
+          id: Date.now().toString(),
+          title: rawText.split('\n')[0] || 'Scanned Homework',
+          subject: 'General',
+          priority: 2,
+          dueDate: `${localDateStr()}T23:59`,
+          duration: 1.0,
+          notes: rawText,
+          completed: false
+        });
+        saveData();
+        toggleModal('ocr-modal');
+        renderAll();
+        showToast("Successfully scanned & added assignment!", "success");
+      } catch (err) {
+        showToast("OCR scanning failed.", "error");
+      } finally {
+        status.classList.add('hidden');
+      }
+    }
+
+    function saveData() {
+      try {
+        localStorage.setItem('dlos_v5_tasks', JSON.stringify(assignments));
+        localStorage.setItem('dlos_v5_notes', JSON.stringify(notes));
+        localStorage.setItem('dlos_v5_cards', JSON.stringify(flashcards));
+        localStorage.setItem('dlos_v5_quiz', JSON.stringify(quizQuestions));
+        localStorage.setItem('dlos_v5_game', JSON.stringify(gameData));
+        localStorage.setItem('dlos_v5_stats', JSON.stringify(stats));
+      } catch (e) {}
+    }
+
+    function getSortedAssignments() {
+      const now = new Date().getTime();
+      return assignments.filter(a => !a.completed).map(task => {
+        const dueTime = new Date(task.dueDate).getTime();
+        const hoursUntilDue = Math.max(0.1, (dueTime - now) / (1000 * 60 * 60));
+        const score = (task.duration / hoursUntilDue) * task.priority;
+        return { ...task, score };
+      }).sort((a, b) => b.score - a.score);
+    }
+
+    function renderAll() {
+      renderHome();
+      renderAssignments();
+      updateGamificationDisplay();
+    }
+
+    function renderHome() {
+      const sorted = getSortedAssignments();
+      const nextCard = sorted[0];
+      const startBtn = document.getElementById('start-focus-btn');
+      const viewBtn = document.getElementById('view-task-btn');
+
+      if (nextCard) {
+        document.getElementById('next-title').textContent = nextCard.title;
+        document.getElementById('next-subject').textContent = nextCard.subject;
+        document.getElementById('next-duration').textContent = `${nextCard.duration} hrs`;
+        const due = new Date(nextCard.dueDate);
+        document.getElementById('next-duedate').textContent = due.toLocaleDateString();
+        document.getElementById('next-countdown').textContent = Math.round((due - new Date()) / (1000 * 60 * 60)) + 'h left';
+        currentFocusId = nextCard.id;
+        startBtn.disabled = false;
+        startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        viewBtn.disabled = false;
+      } else {
+        document.getElementById('next-title').textContent = 'No active assignments';
+        document.getElementById('next-subject').textContent = 'CLEAR';
+        currentFocusId = null;
+        startBtn.disabled = true;
+        startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        viewBtn.disabled = true;
+      }
+
+      const queueContainer = document.getElementById('home-queue-list');
+      queueContainer.innerHTML = '';
+      sorted.slice(0, 3).forEach(task => {
+        queueContainer.innerHTML += `
+          <div class="p-3 rounded-xl bg-bgDark border border-white/5 flex justify-between items-center">
+            <div onclick="openAssignmentDetail('${task.id}')" class="cursor-pointer flex-1">
+              <div class="font-semibold text-sm">${escapeHTML(task.title)}</div>
+              <div class="text-xs text-textSecondary">${escapeHTML(task.subject)}</div>
+            </div>
+            <button onclick="toggleComplete('${task.id}')" class="p-2 rounded-lg bg-elevatedDark hover:bg-neonGreen/20 text-neonGreen transition"><i data-lucide="check" class="w-4 h-4"></i></button>
+          </div>
+        `;
+      });
+      lucide.createIcons();
+    }
+
+    function renderAssignments() {
+      const container = document.getElementById('full-assignment-list');
+      const search = document.getElementById('search-input').value.toLowerCase();
+      const statusFilter = document.getElementById('filter-status').value;
+      const sortBy = document.getElementById('sort-by').value;
+
+      let filtered = assignments.filter(a => {
+        const matchesSearch = a.title.toLowerCase().includes(search) || a.subject.toLowerCase().includes(search);
+        const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && !a.completed) || (statusFilter === 'completed' && a.completed);
+        return matchesSearch && matchesStatus;
+      });
+
+      filtered.sort((a, b) => {
+        if (sortBy === 'priority') return b.priority - a.priority;
+        if (sortBy === 'dueDate') return new Date(a.dueDate) - new Date(b.dueDate);
+        return a.title.localeCompare(b.title);
+      });
+
+      container.innerHTML = filtered.length === 0 ? `<div class="text-center py-12 text-textSecondary text-sm">No matching assignments found.</div>` : '';
+      filtered.forEach(task => {
+        container.innerHTML += `
+          <div class="glass-panel p-5 rounded-2xl border border-white/5 space-y-3 ${task.completed ? 'opacity-50 grayscale' : ''}">
+            <div class="flex justify-between items-start">
+              <div class="space-y-1 cursor-pointer" onclick="openAssignmentDetail('${task.id}')">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-bgDark text-neonCyan font-medium border border-neonCyan/20">${escapeHTML(task.subject)}</span>
+                  <h4 class="font-bold text-base ${task.completed ? 'line-through' : ''}">${escapeHTML(task.title)}</h4>
+                </div>
+                <div class="text-xs text-textSecondary">Due: ${new Date(task.dueDate).toLocaleString()} • ${task.duration} hrs</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="editAssignment('${task.id}')" class="p-2 rounded-xl bg-bgDark text-textSecondary hover:text-white transition border border-white/5"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                <button onclick="toggleComplete('${task.id}')" class="p-2 rounded-xl bg-bgDark text-neonGreen transition border border-white/5"><i data-lucide="${task.completed ? 'rotate-ccw' : 'check'}" class="w-4 h-4"></i></button>
+                <button onclick="deleteAssignment('${task.id}')" class="p-2 rounded-xl bg-bgDark text-textSecondary hover:text-red-400 transition border border-white/5"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      lucide.createIcons();
+    }
+
+    function startDeepWorkOnTopTask() { if (currentFocusId) switchTab('focus'); }
+    function viewTopTaskDetails() { if (currentFocusId) openAssignmentDetail(currentFocusId); }
+
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ assignments, notes, flashcards, quizQuestions, gameData, stats }));
+      const dl = document.createElement('a');
+      dl.setAttribute("href", dataStr);
+      dl.setAttribute("download", `DeadlineOS_Backup.json`);
+      document.body.appendChild(dl);
+      dl.click();
+      dl.remove();
+      showToast("Backup exported!", "success");
+    }
+
+    function importData(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          assignments = parsed.assignments || [];
+          notes = parsed.notes || [];
+          flashcards = parsed.flashcards || [];
+          quizQuestions = parsed.quizQuestions || [];
+          gameData = parsed.gameData || { xp: 0, level: 1 };
+          stats = parsed.stats || { sessions: [] };
+          saveData();
+          renderAll();
+          showToast("Data restored successfully!", "success");
+        } catch (err) {
+          showToast("Invalid backup file.", "error");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function toggleCommandPalette() {
+      const cp = document.getElementById('command-palette');
+      cp.classList.toggle('hidden');
+      if (!cp.classList.contains('hidden')) document.getElementById('cmd-input').focus();
+    }
+
+    function handleCommandSearch(e) {
+      const q = e.target.value.toLowerCase();
+      const res = document.getElementById('cmd-results');
+      res.innerHTML = `
+        <div onclick="switchTab('home'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Go to Home</div>
+        <div onclick="switchTab('assignments'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Go to Assignments</div>
+        <div onclick="switchTab('notes'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Open Subject Notes</div>
+        <div onclick="switchTab('flashcards'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Study Flashcards</div>
+        <div onclick="switchTab('quiz'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Take Practice Quiz</div>
+        <div onclick="switchTab('bot'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Ask AI Study Bot</div>
+        <div onclick="switchTab('focus'); toggleCommandPalette();" class="p-2.5 rounded-xl bg-bgDark hover:bg-elevatedDark cursor-pointer text-sm">Open Deep Work</div>
+      `;
+    }
+
+    function initParticles() {
+      const canvas = document.getElementById('particle-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+
+      let particles = [];
+      let mouse = { x: null, y: null };
+      window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+      for (let i = 0; i < 150; i++) {
+        const hX = Math.random() * canvas.width;
+        const hY = Math.random() * canvas.height;
+        particles.push({ homeX: hX, homeY: hY, x: hX, y: hY, vx: 0, vy: 0, size: Math.random() * 1.5 + 0.5, color: Math.random() > 0.4 ? 'rgba(0, 240, 255, ' : 'rgba(184, 41, 255, ' });
+      }
+
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          let fx = 0.08 * (p.homeX - p.x);
+          let fy = 0.08 * (p.homeY - p.y);
+          p.vx = (p.vx + fx) * 0.85;
+          p.vy = (p.vy + fy) * 0.85;
+          p.x += p.vx;
+          p.y += p.vy;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = p.color + '0.5)';
+          ctx.fill();
+        });
+        requestAnimationFrame(animate);
+      }
+      animate();
+    }
+  </script>
+</body>
+</html>
