@@ -106,7 +106,13 @@
   <canvas id="particle-canvas"></canvas>
   <div class="grid-background"></div>
 
-  <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+  <!-- STILL IN PROGRESS BANNER -->
+  <div class="w-full bg-elevatedDark border-b border-statusWarning/30 py-2.5 px-4 text-center z-20 flex items-center justify-center gap-2 text-xs font-semibold text-statusWarning shadow-lg">
+    <i data-lucide="construction" class="w-4 h-4 animate-pulse"></i>
+    <span><strong>Website & AI Bot Still in Progress:</strong> We are currently working hard on building and refining features. Stay tuned!</span>
+  </div>
+
+  <div id="toast-container" class="fixed top-14 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
 
   <!-- COMMAND PALETTE -->
   <div id="command-palette" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-start justify-center pt-24 p-4">
