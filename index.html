@@ -2254,15 +2254,32 @@
         const hX = Math.random() * canvas.width;
         const hY = Math.random() * canvas.height;
         const useCyan = Math.random() > 0.4;
-        particles.push({ homeX: hX, homeY: hY, x: hX, y: hY, vx: 0, vy: 0, size: Math.random() * 1.5 + 0.5, color: useCyan ? 'rgba(0, 240, 255, ' : 'rgba(184, 41, 255, ', lightColor: useCyan ? 'rgba(14, 116, 144, ' : 'rgba(162, 28, 232, ' });
+        particles.push({ homeX: hX, homeY: hY, x: hX, y: hY, vx: 0, vy: 0, size: Math.random() * 1.5 + 0.5, driftX: (Math.random() - 0.5) * 0.6, driftY: (Math.random() - 0.5) * 0.6, color: useCyan ? 'rgba(0, 240, 255, ' : 'rgba(184, 41, 255, ', lightColor: useCyan ? 'rgba(14, 116, 144, ' : 'rgba(162, 28, 232, ' });
       }
 
       function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
         particles.forEach(p => {
+          // Slow drifting motion; particles wrap around the screen edges
+          p.homeX += p.driftX;
+          p.homeY += p.driftY;
+          if (p.homeX < -10) { p.homeX = canvas.width + 10; p.x = p.homeX; }
+          else if (p.homeX > canvas.width + 10) { p.homeX = -10; p.x = p.homeX; }
+          if (p.homeY < -10) { p.homeY = canvas.height + 10; p.y = p.homeY; }
+          else if (p.homeY > canvas.height + 10) { p.homeY = -10; p.y = p.homeY; }
+
           let fx = 0.08 * (p.homeX - p.x);
           let fy = 0.08 * (p.homeY - p.y);
+          // Particles gently move away from the mouse
+          if (mouse.x !== null) {
+            const dx = p.x - mouse.x, dy = p.y - mouse.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 120 && dist > 0) {
+              fx += (dx / dist) * (120 - dist) * 0.05;
+              fy += (dy / dist) * (120 - dist) * 0.05;
+            }
+          }
           p.vx = (p.vx + fx) * 0.85;
           p.vy = (p.vy + fy) * 0.85;
           p.x += p.vx;
