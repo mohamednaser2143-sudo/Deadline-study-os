@@ -80,7 +80,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "Please send a valid question and keep the recent conversation shorter." });
   }
 
-  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const model = "openai/gpt-oss-120b";
   const systemPrompt = [
     "You are DeadlineOS AI, a helpful, patient study assistant inside a student productivity website.",
     "Answer general questions, explain math and coding clearly, and help with schoolwork.",
