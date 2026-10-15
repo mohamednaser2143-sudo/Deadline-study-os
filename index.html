@@ -106,13 +106,7 @@
   <canvas id="particle-canvas"></canvas>
   <div class="grid-background"></div>
 
-  <!-- STILL IN PROGRESS BANNER -->
-  <div class="w-full bg-elevatedDark border-b border-statusWarning/30 py-2.5 px-4 text-center z-20 flex items-center justify-center gap-2 text-xs font-semibold text-statusWarning shadow-lg">
-    <i data-lucide="construction" class="w-4 h-4 animate-pulse"></i>
-    <span><strong>Website & AI Bot Still in Progress:</strong> We are currently working hard on building and refining features. Stay tuned!</span>
-  </div>
-
-  <div id="toast-container" class="fixed top-14 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+  <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
 
   <!-- COMMAND PALETTE -->
   <div id="command-palette" class="hidden fixed inset-0 bg-bgDark/80 backdrop-blur-md z-50 flex items-start justify-center pt-24 p-4">
@@ -367,21 +361,25 @@
 
     <!-- AI STUDY BOT PAGE -->
     <section id="page-bot" class="hidden space-y-6 max-w-3xl mx-auto">
-      <div>
-        <h1 class="font-display text-3xl font-bold flex items-center gap-2"><i data-lucide="bot" class="text-neonCyan w-7 h-7"></i> AI Study Bot</h1>
-        <p class="text-textSecondary text-sm mt-1">Ask questions, get scheduling advice, or request instant study breakdowns.</p>
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 class="font-display text-3xl font-bold flex items-center gap-2"><i data-lucide="bot" class="text-neonCyan w-7 h-7"></i> AI Study Bot</h1>
+          <p class="text-textSecondary text-sm mt-1">Ask questions about math, homework, coding, or almost anything.</p>
+        </div>
+        <button onclick="clearBotChat()" class="px-3 py-2 rounded-xl bg-elevatedDark border border-white/10 text-textSecondary hover:text-neonCyan text-xs font-semibold">New Chat</button>
       </div>
-      <div class="glass-panel rounded-3xl p-6 flex flex-col h-[60vh] border-neonCyan/30">
-        <div id="bot-chat-history" class="flex-1 overflow-y-auto space-y-4 pr-2 text-xs">
+      <div class="glass-panel rounded-3xl p-6 flex flex-col h-[60vh] min-h-[400px] border-neonCyan/30">
+        <div id="bot-chat-history" aria-live="polite" class="flex-1 overflow-y-auto space-y-4 pr-2 text-xs">
           <div class="p-3.5 rounded-2xl bg-elevatedDark border border-white/5 max-w-[85%] space-y-1">
-            <span class="text-[10px] text-neonCyan font-bold">DeadlineOS Study Assistant</span>
-            <p class="text-textPrimary">Hello! I am your built-in study bot. Ask me for study strategies, homework organization tips, or motivational boosts!</p>
+            <span class="text-[10px] text-neonCyan font-bold">DeadlineOS AI</span>
+            <p class="text-textPrimary">Hey! Ask me a question and I'll help you work through it. For math or homework, I can explain the steps too.</p>
           </div>
         </div>
         <div class="pt-4 border-t border-white/5 flex gap-2">
-          <input type="text" id="bot-input" onkeydown="if(event.key==='Enter') sendBotMessage()" placeholder="Ask study bot anything..." class="flex-1 px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary outline-none focus:border-neonCyan">
-          <button onclick="sendBotMessage()" class="px-5 py-3 rounded-xl bg-neonCyan text-bgDark font-bold text-xs hover:opacity-90">Send</button>
+          <input type="text" id="bot-input" onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendBotMessage(); }" maxlength="4000" autocomplete="off" placeholder="Ask the AI anything..." aria-label="Your question" class="flex-1 min-w-0 px-4 py-3 rounded-xl bg-bgDark border border-white/10 text-xs text-textPrimary outline-none focus:border-neonCyan">
+          <button id="bot-send-btn" onclick="sendBotMessage()" class="px-5 py-3 rounded-xl bg-neonCyan text-bgDark font-bold text-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
         </div>
+        <p class="text-[10px] text-textSecondary mt-2">AI answers can be wrong. Check important information.</p>
       </div>
     </section>
 
@@ -1054,41 +1052,91 @@
       showToast("Question added to quiz!", "success");
     }
 
-    // --- AI STUDY BOT SYSTEM ---
-    function sendBotMessage() {
-      const input = document.getElementById('bot-input');
-      const txt = input.value.trim();
-      if (!txt) return;
+    // --- GROQ-POWERED AI STUDY BOT ---
+    // Chat history is kept in memory for this browser tab only. The API key stays on the server.
+    let botConversation = [];
+    let botIsSending = false;
 
+    function appendBotMessage(role, text) {
       const history = document.getElementById('bot-chat-history');
-      history.innerHTML += `
-        <div class="p-3.5 rounded-2xl bg-bgDark border border-white/5 max-w-[85%] ml-auto space-y-1">
-          <span class="text-[10px] text-neonViolet font-bold">You</span>
-          <p class="text-textPrimary">${escapeHTML(txt)}</p>
-        </div>
-      `;
-      input.value = '';
-      history.scrollTop = history.scrollHeight;
+      const wrapper = document.createElement('div');
+      const isUser = role === 'user';
+      wrapper.className = `p-3.5 rounded-2xl border border-white/5 max-w-[90%] space-y-1 whitespace-pre-wrap break-words ${isUser ? 'bg-bgDark ml-auto' : 'bg-elevatedDark'}`;
 
-      setTimeout(() => {
-        let reply = "That's a great question! Make sure to break your tasks down into 25-minute focus intervals and use the flashcards tab for active recall.";
-        const lower = txt.toLowerCase();
-        if (lower.includes('schedule') || lower.includes('plan')) {
-          reply = "Check your Home briefing for automated priority tasks. Focus on high urgency homework first!";
-        } else if (lower.includes('motivation') || lower.includes('tired')) {
-          reply = "You've got this! Take a 5-minute breather, drink some water, and crush your next goal.";
-        } else if (lower.includes('exam') || lower.includes('test')) {
-          reply = "For exams, practice active recall using the Flashcards and Quiz modules built into DeadlineOS!";
+      const label = document.createElement('span');
+      label.className = `text-[10px] font-bold ${isUser ? 'text-neonViolet' : 'text-neonCyan'}`;
+      label.textContent = isUser ? 'You' : 'DeadlineOS AI';
+
+      const paragraph = document.createElement('p');
+      paragraph.className = 'text-textPrimary';
+      paragraph.textContent = text;
+
+      wrapper.appendChild(label);
+      wrapper.appendChild(paragraph);
+      history.appendChild(wrapper);
+      history.scrollTop = history.scrollHeight;
+      return wrapper;
+    }
+
+    function clearBotChat() {
+      if (botIsSending) return;
+      botConversation = [];
+      const history = document.getElementById('bot-chat-history');
+      history.innerHTML = '';
+      appendBotMessage('assistant', "Hey! Ask me a question and I'll help you work through it. For math or homework, I can explain the steps too.");
+      document.getElementById('bot-input').focus();
+    }
+
+    async function sendBotMessage() {
+      const input = document.getElementById('bot-input');
+      const sendButton = document.getElementById('bot-send-btn');
+      const txt = input.value.trim();
+      if (!txt || botIsSending) return;
+
+      if (txt.length > 4000) {
+        showToast('Please keep each message under 4,000 characters.', 'error');
+        return;
+      }
+
+      botIsSending = true;
+      sendButton.disabled = true;
+      sendButton.textContent = 'Thinking...';
+      input.value = '';
+      appendBotMessage('user', txt);
+      botConversation.push({ role: 'user', content: txt });
+
+      // Keep the latest messages to limit request size while preserving follow-up context.
+      botConversation = botConversation.slice(-12);
+      const thinking = appendBotMessage('assistant', 'Thinking…');
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: botConversation })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (botConversation.length && botConversation[botConversation.length - 1].role === 'user') {
+            botConversation.pop();
+          }
+          throw new Error(data.error || 'The AI could not answer right now. Please try again in a moment.');
         }
 
-        history.innerHTML += `
-          <div class="p-3.5 rounded-2xl bg-elevatedDark border border-white/5 max-w-[85%] space-y-1">
-            <span class="text-[10px] text-neonCyan font-bold">DeadlineOS Study Assistant</span>
-            <p class="text-textPrimary">${escapeHTML(reply)}</p>
-          </div>
-        `;
-        history.scrollTop = history.scrollHeight;
-      }, 600);
+        const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
+        if (!reply) throw new Error('The AI returned an empty answer. Please try again.');
+        botConversation.push({ role: 'assistant', content: reply });
+        thinking.querySelector('p').textContent = reply;
+      } catch (error) {
+        thinking.remove();
+        appendBotMessage('assistant', error.message || 'Something went wrong. Please try again.');
+      } finally {
+        botIsSending = false;
+        sendButton.disabled = false;
+        sendButton.textContent = 'Send';
+        input.focus();
+      }
     }
 
     // --- DEEP WORK WORKSPACE & TIMER ---
