@@ -12,6 +12,12 @@
       try { var saved = localStorage.getItem('dlos_v5_theme'); if (saved === 'light' || saved === 'dark') theme = saved; } catch (e) {}
       document.documentElement.setAttribute('data-theme', theme);
     })();
+    // Lock the site until the password has been entered on this device.
+    (function () {
+      var unlocked = false;
+      try { unlocked = localStorage.getItem('dlos_v5_unlocked') === '1'; } catch (e) {}
+      if (!unlocked) document.documentElement.classList.add('dlos-locked');
+    })();
   </script>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -163,12 +169,44 @@
     .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
     .flip-front, .flip-back { backface-visibility: hidden; position: absolute; inset: 0; }
     .flip-back { transform: rotateY(180deg); }
+
+    /* PASSWORD LOCK SCREEN */
+    #lock-screen { display: none; }
+    html.dlos-locked body { overflow: hidden; }
+    html.dlos-locked body > *:not(#lock-screen):not(#particle-canvas):not(.grid-background) { display: none !important; }
+    html.dlos-locked #lock-screen { display: flex; }
+    @keyframes lockShake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .lock-shake { animation: lockShake 0.4s ease; }
   </style>
 </head>
 <body class="relative flex flex-col items-center">
 
   <canvas id="particle-canvas"></canvas>
   <div class="grid-background"></div>
+
+  <!-- PASSWORD LOCK SCREEN -->
+  <div id="lock-screen" class="fixed inset-0 z-[100] items-center justify-center p-4">
+    <form id="lock-form" onsubmit="submitSitePassword(event)" class="glass-panel w-full max-w-sm rounded-2xl p-8 space-y-6 animate-modal-pop shadow-2xl text-center">
+      <div class="mx-auto w-14 h-14 flex items-center justify-center rounded-2xl bg-elevatedDark border border-neonCyan/50">
+        <i data-lucide="lock" class="w-7 h-7 text-neonCyan"></i>
+      </div>
+      <div>
+        <div class="font-display font-bold text-2xl tracking-wider">DEADLINE<span class="text-neonCyan">OS</span></div>
+        <p class="text-sm text-textSecondary mt-1">Enter the password to continue</p>
+      </div>
+      <input type="password" id="lock-password" autocomplete="current-password" required maxlength="200" placeholder="Password"
+        class="w-full px-4 py-3 rounded-xl bg-elevatedDark border border-white/10 text-textPrimary placeholder-textSecondary outline-none focus:border-neonCyan/60 transition-colors">
+      <p id="lock-error" class="hidden text-sm text-red-400" role="alert"></p>
+      <button type="submit" id="lock-submit"
+        class="w-full py-3 rounded-xl bg-neonCyan/15 border border-neonCyan/40 text-neonCyan font-semibold hover:bg-neonCyan/25 transition-colors disabled:opacity-50">
+        Unlock
+      </button>
+    </form>
+  </div>
 
   <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
 
@@ -927,7 +965,44 @@
       "Excellence is not an act, but a habit."
     ];
 
+    async function submitSitePassword(event) {
+      event.preventDefault();
+      const input = document.getElementById('lock-password');
+      const error = document.getElementById('lock-error');
+      const button = document.getElementById('lock-submit');
+      const form = document.getElementById('lock-form');
+      error.classList.add('hidden');
+      button.disabled = true;
+      button.textContent = 'Checking...';
+      try {
+        const res = await fetch('/api/unlock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: input.value })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not unlock. Please try again.');
+        try { localStorage.setItem('dlos_v5_unlocked', '1'); } catch (e) {}
+        document.documentElement.classList.remove('dlos-locked');
+        input.value = '';
+        lucide.createIcons();
+      } catch (err) {
+        error.textContent = err.message === 'Failed to fetch' ? 'Could not reach the server. Check your connection.' : err.message;
+        error.classList.remove('hidden');
+        form.classList.remove('lock-shake');
+        void form.offsetWidth;
+        form.classList.add('lock-shake');
+        input.select();
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Unlock';
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
+      if (document.documentElement.classList.contains('dlos-locked')) {
+        setTimeout(() => document.getElementById('lock-password').focus(), 50);
+      }
       lucide.createIcons();
       initTheme();
       initParticles();
